@@ -42,7 +42,7 @@ class ImageBaseDataset:
         self.dataset_name = dataset
         self.img_root = osp.join(ROOT, 'images', img_root_map(dataset))
 
-        data = self.load_data(dataset)
+        data = self.load_data(dataset).head(5)
         self.skip_noimg = skip_noimg
         if skip_noimg and 'image' in data:
             data = data[~pd.isna(data['image'])]

@@ -55,6 +55,7 @@ from .slime import SliME
 from .mplug_owl3 import mPLUG_Owl3
 from .pixtral import Pixtral
 from .llama_vision import llama_vision
+from .llama_vision_cot import llama_vision_cot
 from .molmo import molmo
 from .points import POINTS, POINTSV15
 from .nvlm import NVLM
