@@ -273,9 +273,9 @@ class llama_vision_cot(BaseModel):
                 ]}
             ]
             reasoning_input_text_1 = self.processor.apply_chat_template(reasoning_message_1, add_generation_prompt=True)
-            reasoning_inputs_1, vision_tower_latency_1, vision_tower_memory_1 = profile(lambda: self.processor(None, reasoning_input_text_1, return_tensors='pt').to(self.device))
+            reasoning_inputs_1 = self.processor(None, reasoning_input_text_1, return_tensors='pt').to(self.device)
             input_length_1 = reasoning_inputs_1["input_ids"].numel()
-            reasoning_output_1, llm_latency_1, llm_memory_1 = profile(lambda: self.model.generate(**reasoning_inputs_1, **self.kwargs))
+            reasoning_output_1, llm_latency_1, llm_memory_1, kv_cache_size_1 = profile(self.model.generate, **reasoning_inputs_1, **self.kwargs)
             output_length_1 = reasoning_output_1.numel()
             reasoning_output_text_1 = self.processor.decode(reasoning_output_1[0][reasoning_inputs_1['input_ids'].shape[1]:]).replace('<|eot_id|>', '').replace('<|endoftext|>', '')
             if "incorrect" in reasoning_output_text_1:
@@ -287,7 +287,7 @@ class llama_vision_cot(BaseModel):
                         "judge_output": reasoning_output_text_1
                     }
                     f.write(json.dumps(json_obj) + '\n')
-                return 1, {"vision_tower_latency": vision_tower_latency_1, "llm_latency": llm_latency_1, "input_length": input_length_1, "gen_tokens_num": output_length_1 - input_length_1, "vision_tower_memory": vision_tower_memory_1, "llm_memory": llm_memory_1}
+                return 1, {"llm_latency": llm_latency_1, "input_length": input_length_1, "gen_tokens_num": output_length_1 - input_length_1, "llm_memory": llm_memory_1, "kv_cache_size": kv_cache_size_1}
             
             reasoning_prompt_2 = reasoning_prompt + f'\n\nGiven Information: {hint}' + f'\n\nReasoning Process: {input_outputs[1]}'
             reasoning_message_2 = [
@@ -296,9 +296,9 @@ class llama_vision_cot(BaseModel):
                 ]}
             ]
             reasoning_input_text_2 = self.processor.apply_chat_template(reasoning_message_2, add_generation_prompt=True)
-            reasoning_inputs_2, vision_tower_latency_2, vision_tower_memory_2 = profile(lambda: self.processor(None, reasoning_input_text_2, return_tensors='pt').to(self.device))
+            reasoning_inputs_2 = self.processor(None, reasoning_input_text_2, return_tensors='pt').to(self.device)
             input_length_2 = reasoning_inputs_2["input_ids"].numel()
-            reasoning_output_2, llm_latency_2, llm_memory_2 = profile(lambda: self.model.generate(**reasoning_inputs_2, **self.kwargs))
+            reasoning_output_2, llm_latency_2, llm_memory_2, kv_cache_size_2 = profile(self.model.generate, **reasoning_inputs_2, **self.kwargs)
             output_length_2 = reasoning_output_2.numel()
             reasoning_output_text_2 = self.processor.decode(reasoning_output_2[0][reasoning_inputs_2['input_ids'].shape[1]:]).replace('<|eot_id|>', '').replace('<|endoftext|>', '')
             if "incorrect" in reasoning_output_text_2:
@@ -310,9 +310,9 @@ class llama_vision_cot(BaseModel):
                         "judge_output": reasoning_output_text_2
                     }
                     f.write(json.dumps(json_obj) + '\n')
-                return 0, {"vision_tower_latency": vision_tower_latency_1 + vision_tower_latency_2, "llm_latency": llm_latency_1 + llm_latency_2, "input_length": input_length_1 + input_length_2, \
+                return 0, {"llm_latency": llm_latency_1 + llm_latency_2, "input_length": input_length_1 + input_length_2, \
                            "gen_tokens_num": output_length_1 + output_length_2 - input_length_1 - input_length_2, \
-                           "vision_tower_memory": max(vision_tower_memory_1, vision_tower_memory_2), "llm_memory": max(llm_memory_1, llm_memory_2)}
+                           "llm_memory": max(llm_memory_1, llm_memory_2), "kv_cache_size": kv_cache_size_1 + kv_cache_size_2}
                 
         judge_prompt += f'\n\nQuestion: {prompt}'
         if hint:
@@ -330,9 +330,9 @@ class llama_vision_cot(BaseModel):
             ]}
         ]
         judge_input_text = self.processor.apply_chat_template(judge_message, add_generation_prompt=True)
-        judge_inputs, vision_tower_latency, vision_tower_memory = profile(lambda: self.processor(image, judge_input_text, return_tensors='pt').to(self.device))
+        judge_inputs = self.processor(image, judge_input_text, return_tensors='pt').to(self.device)
         input_length = judge_inputs["input_ids"].numel()
-        judge_output, llm_latency, llm_memory = profile(lambda: self.model.generate(**judge_inputs, **self.kwargs))
+        judge_output, llm_latency, llm_memory, kv_cache_size = profile(self.model.generate, **judge_inputs, **self.kwargs)
         output_length = judge_output.numel()
         judge_output_text = self.processor.decode(judge_output[0][judge_inputs['input_ids'].shape[1]:]).replace('<|eot_id|>', '').replace('<|endoftext|>', '')
         
@@ -346,9 +346,9 @@ class llama_vision_cot(BaseModel):
             f.write(json.dumps(json_obj) + '\n')
         
         if "I choose response 1" in judge_output_text:
-            return 0, {"vision_tower_latency": vision_tower_latency, "llm_latency": llm_latency, "input_length": input_length, "gen_tokens_num": output_length - input_length, "vision_tower_memory": vision_tower_memory, "llm_memory": llm_memory}
+            return 0, {"llm_latency": llm_latency, "input_length": input_length, "gen_tokens_num": output_length - input_length, "llm_memory": llm_memory, "kv_cache_size": kv_cache_size}
         else:
-            return 1, {"vision_tower_latency": vision_tower_latency, "llm_latency": llm_latency, "input_length": input_length, "gen_tokens_num": output_length - input_length, "vision_tower_memory": vision_tower_memory, "llm_memory": llm_memory}
+            return 1, {"llm_latency": llm_latency, "input_length": input_length, "gen_tokens_num": output_length - input_length, "llm_memory": llm_memory, "kv_cache_size": kv_cache_size}
     
     def generate_inner_stage_beam(self, message, dataset=None):
         prompt, image_path = self.message_to_promptimg(message, dataset=dataset)
@@ -376,6 +376,9 @@ class llama_vision_cot(BaseModel):
         input_ids = copy.deepcopy(inputs['input_ids'])
 
         for stage, end_marker in zip(stages, end_markers):
+            total_kv_cache_size = 0
+            torch.cuda.empty_cache()
+            torch.cuda.reset_max_memory_allocated()
             stop_criteria = StoppingCriteriaList([StopOnStrings([end_marker], self.processor.tokenizer)])
             
             stage_start_event = torch.cuda.Event(enable_timing=True)
@@ -392,11 +395,12 @@ class llama_vision_cot(BaseModel):
                     'stopping_criteria': stop_criteria
                 })
                 
-                inputs, vision_tower_latency, vision_tower_memory = profile(lambda: self.processor(image, input_ids, return_tensors='pt').to(self.device))
+                inputs = self.processor(image, input_ids, return_tensors='pt').to(self.device)
                 input_length = inputs["input_ids"].numel()
-                output, llm_latency, llm_memory = profile(lambda: self.model.generate(**inputs, **generation_kwargs))
+                output, llm_latency, llm_memory, kv_cache_size = profile(self.model.generate, **inputs, **generation_kwargs)
                 output_length = output.numel()
-                gen_latencies.append({"vision_tower_latency": vision_tower_latency, "llm_latency": llm_latency, "input_length": input_length, "gen_tokens_num": output_length - input_length, "vision_tower_memory": vision_tower_memory, "llm_memory": llm_memory})
+                total_kv_cache_size += kv_cache_size
+                gen_latencies.append({"llm_latency": llm_latency, "input_length": input_length, "gen_tokens_num": output_length - input_length, "llm_memory": llm_memory, "kv_cache_size": kv_cache_size})
                 
                 new_generated_ids = output[0]
                 
@@ -417,6 +421,7 @@ class llama_vision_cot(BaseModel):
 
                 best_index, single_pass_latency = self.judge(image, prompt, outputs, type=stage[1:-1].lower())
                 judge_latencies.append(single_pass_latency)
+                total_kv_cache_size += single_pass_latency["kv_cache_size"]
 
                 if best_index == 0:
                     candidates.append(candidate1)
@@ -429,10 +434,14 @@ class llama_vision_cot(BaseModel):
             torch.cuda.synchronize()
             stage_latency = stage_start_event.elapsed_time(stage_end_event)
 
+            max_memory_allocated = torch.cuda.max_memory_allocated() / (1024 * 1024)
+
             latencies[stage] = {
                 "gen_stats": gen_latencies,
                 "judge_stats": judge_latencies,
-                "total_stage_latency": stage_latency
+                "total_stage_latency": stage_latency,
+                "total_stage_memory": max_memory_allocated,
+                "total_kv_cache_size": total_kv_cache_size
             }
 
         total_gen_tokens = input_ids.numel() - initial_length
@@ -450,18 +459,27 @@ class llama_vision_cot(BaseModel):
     def generate_inner(self, message, dataset=None):
         return self.generate_inner_stage_beam(message, dataset)
 
-def profile(func):
+def profile(func, *args, **kwargs):
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
     torch.cuda.synchronize()
     torch.cuda.reset_max_memory_allocated()
     
     start_event.record()
-    result = func()  # Execute the function passed as an argument
+    result = func(*args, return_dict_in_generate=True, **kwargs)  # Execute the function passed as an argument
     end_event.record()
     
     torch.cuda.synchronize()
     latency = start_event.elapsed_time(end_event)
     max_memory_allocated = torch.cuda.max_memory_allocated() / (1024 * 1024)
+    if hasattr(result, "past_key_values"):
+        num_layers = len(result.past_key_values)
+        num_elements = 2 * result.past_key_values[0][0].numel()
+        dtype_size = 2 # bf16
+        kv_cache_size = num_layers * num_elements * dtype_size / (1024 * 1024)
     
-    return result, latency, max_memory_allocated
+    if hasattr(result, 'sequences'):
+        logits = result.sequences
+    else:
+        logits = result
+    return logits, latency, max_memory_allocated, kv_cache_size
