@@ -345,10 +345,13 @@ class llama_vision_cot(BaseModel):
             }
             f.write(json.dumps(json_obj) + '\n')
         
+        stats = {"llm_latency": llm_latency + llm_latency_1 + llm_latency_2, "input_length": input_length + input_length_1 + input_length_2, \
+        "gen_tokens_num": output_length + output_length_1 + output_length_2 - input_length - input_length_1 - input_length_2, \
+        "llm_memory": max(llm_memory, llm_memory_1, llm_latency_2), "kv_cache_size": kv_cache_size + kv_cache_size_1 + kv_cache_size_2}
         if "I choose response 1" in judge_output_text:
-            return 0, {"llm_latency": llm_latency, "input_length": input_length, "gen_tokens_num": output_length - input_length, "llm_memory": llm_memory, "kv_cache_size": kv_cache_size}
+            return 0, stats
         else:
-            return 1, {"llm_latency": llm_latency, "input_length": input_length, "gen_tokens_num": output_length - input_length, "llm_memory": llm_memory, "kv_cache_size": kv_cache_size}
+            return 1, stats
     
     def generate_inner_stage_beam(self, message, dataset=None):
         prompt, image_path = self.message_to_promptimg(message, dataset=dataset)
@@ -389,6 +392,8 @@ class llama_vision_cot(BaseModel):
             candidates = []
 
             gen_latencies = []
+            # input_txt = self.processor.tokenizer.decode(input_ids[0], skip_special_tokens=True)
+            # print("Input: \n", input_txt)
             for _ in range(2):  
                 generation_kwargs = self.kwargs.copy()
                 generation_kwargs.update({
@@ -405,6 +410,7 @@ class llama_vision_cot(BaseModel):
                 new_generated_ids = output[0]
                 
                 generated_text = self.processor.tokenizer.decode(new_generated_ids[initial_length:], skip_special_tokens=True)
+                # print(generated_text + "\n")
                 
                 candidates.append({
                     'input_ids': new_generated_ids.unsqueeze(0),
@@ -449,7 +455,7 @@ class llama_vision_cot(BaseModel):
         import json
 
         # Save to JSON
-        with open("latency_results.json", "a") as f:
+        with open("latency_results.json", "w") as f:
             json.dump(latencies, f, indent=4)
 
         print("Latencies saved to latency_results.json")
