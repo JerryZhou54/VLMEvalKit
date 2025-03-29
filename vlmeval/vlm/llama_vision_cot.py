@@ -381,7 +381,7 @@ class llama_vision_cot(BaseModel):
         end_markers = ['</SUMMARY>', '</CAPTION>', '</REASONING>', '</CONCLUSION>']
         latencies = {}
         text_output = {k: {"input": "", "judge_output_text": "", "output_candidates": []} for k in stages}
-        text_output["num_image_tokens"] = 0
+        text_output = {"image_path": image_path, "num_image_tokens": 0, **text_output}
 
         initial_length = len(inputs['input_ids'][0])
         input_ids = copy.deepcopy(inputs['input_ids'])
