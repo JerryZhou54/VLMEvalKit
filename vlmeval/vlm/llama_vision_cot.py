@@ -287,7 +287,7 @@ class llama_vision_cot(BaseModel):
                         "judge_output": reasoning_output_text_1
                     }
                     f.write(json.dumps(json_obj) + '\n')
-                return 1, {"llm_latency": llm_latency_1, "input_length": input_length_1, "gen_tokens_num": output_length_1 - input_length_1, "llm_memory": llm_memory_1, "kv_cache_size": kv_cache_size_1}
+                return 1, reasoning_output_text_1, {"llm_latency": llm_latency_1, "input_length": input_length_1, "gen_tokens_num": output_length_1 - input_length_1, "llm_memory": llm_memory_1, "kv_cache_size": kv_cache_size_1}
             
             reasoning_prompt_2 = reasoning_prompt + f'\n\nGiven Information: {hint}' + f'\n\nReasoning Process: {input_outputs[1]}'
             reasoning_message_2 = [
@@ -310,7 +310,7 @@ class llama_vision_cot(BaseModel):
                         "judge_output": reasoning_output_text_2
                     }
                     f.write(json.dumps(json_obj) + '\n')
-                return 0, {"llm_latency": llm_latency_1 + llm_latency_2, "input_length": input_length_1 + input_length_2, \
+                return 0, reasoning_output_text_1 + reasoning_output_text_2, {"llm_latency": llm_latency_1 + llm_latency_2, "input_length": input_length_1 + input_length_2, \
                            "gen_tokens_num": output_length_1 + output_length_2 - input_length_1 - input_length_2, \
                            "llm_memory": max(llm_memory_1, llm_memory_2), "kv_cache_size": kv_cache_size_1 + kv_cache_size_2}
                 
@@ -345,13 +345,19 @@ class llama_vision_cot(BaseModel):
             }
             f.write(json.dumps(json_obj) + '\n')
         
-        stats = {"llm_latency": llm_latency + llm_latency_1 + llm_latency_2, "input_length": input_length + input_length_1 + input_length_2, \
-        "gen_tokens_num": output_length + output_length_1 + output_length_2 - input_length - input_length_1 - input_length_2, \
-        "llm_memory": max(llm_memory, llm_memory_1, llm_latency_2), "kv_cache_size": kv_cache_size + kv_cache_size_1 + kv_cache_size_2}
-        if "I choose response 1" in judge_output_text:
-            return 0, stats
+        if type == "reasoning":
+            stats = {"llm_latency": llm_latency + llm_latency_1 + llm_latency_2, "input_length": input_length + input_length_1 + input_length_2, \
+            "gen_tokens_num": output_length + output_length_1 + output_length_2 - input_length - input_length_1 - input_length_2, \
+            "llm_memory": max(llm_memory, llm_memory_1, llm_latency_2), "kv_cache_size": kv_cache_size + kv_cache_size_1 + kv_cache_size_2}
+            judge_output_text += reasoning_output_text_1 + reasoning_output_text_2
         else:
-            return 1, stats
+            stats = {"llm_latency": llm_latency, "input_length": input_length, \
+            "gen_tokens_num": output_length - input_length, \
+            "llm_memory": llm_memory, "kv_cache_size": kv_cache_size}
+        if "I choose response 1" in judge_output_text:
+            return 0, judge_output_text, stats
+        else:
+            return 1, judge_output_text, stats
     
     def generate_inner_stage_beam(self, message, dataset=None):
         prompt, image_path = self.message_to_promptimg(message, dataset=dataset)
@@ -374,9 +380,14 @@ class llama_vision_cot(BaseModel):
         stages = ['<SUMMARY>', '<CAPTION>', '<REASONING>', '<CONCLUSION>']
         end_markers = ['</SUMMARY>', '</CAPTION>', '</REASONING>', '</CONCLUSION>']
         latencies = {}
+        text_output = {k: {"input": "", "judge_output_text": "", "output_candidates": []} for k in stages}
+        text_output["num_image_tokens"] = 0
 
         initial_length = len(inputs['input_ids'][0])
         input_ids = copy.deepcopy(inputs['input_ids'])
+        input_txt = self.processor.tokenizer.decode(input_ids[0], skip_special_tokens=True)
+        initial_txt_length = len(input_txt)
+        del input_txt
 
         for stage, end_marker in zip(stages, end_markers):
             total_kv_cache_size = 0
@@ -392,15 +403,26 @@ class llama_vision_cot(BaseModel):
             candidates = []
 
             gen_latencies = []
-            # input_txt = self.processor.tokenizer.decode(input_ids[0], skip_special_tokens=True)
+            input_txt = self.processor.tokenizer.decode(input_ids[0], skip_special_tokens=True)
+            text_output[stage]['input'] = input_txt
             # print("Input: \n", input_txt)
-            for _ in range(2):  
+            for it in range(2):  
                 generation_kwargs = self.kwargs.copy()
                 generation_kwargs.update({
                     'stopping_criteria': stop_criteria
                 })
                 
                 inputs = self.processor(image, input_ids, return_tensors='pt').to(self.device)
+                if it == 0:
+                    vision_outputs = self.model.vision_model(
+                        pixel_values=inputs["pixel_values"],
+                        aspect_ratio_ids=inputs["aspect_ratio_ids"],
+                        aspect_ratio_mask=inputs["aspect_ratio_mask"],
+                        output_hidden_states=False,
+                        output_attentions=False,
+                        return_dict=False,
+                    )
+                    text_output["num_image_tokens"] = vision_outputs[0].shape[-2]
                 input_length = inputs["input_ids"].numel()
                 output, llm_latency, llm_memory, kv_cache_size = profile(self.model.generate, **inputs, **generation_kwargs)
                 output_length = output.numel()
@@ -410,6 +432,8 @@ class llama_vision_cot(BaseModel):
                 new_generated_ids = output[0]
                 
                 generated_text = self.processor.tokenizer.decode(new_generated_ids[initial_length:], skip_special_tokens=True)
+                start_idx = len(input_txt) - initial_txt_length
+                text_output[stage]['output_candidates'].append(generated_text[start_idx:])
                 # print(generated_text + "\n")
                 
                 candidates.append({
@@ -425,7 +449,10 @@ class llama_vision_cot(BaseModel):
                 candidate2 = candidates.pop(np.random.randint(len(candidates)))
                 outputs = [candidate1['generated_text'], candidate2['generated_text']]
 
-                best_index, single_pass_latency = self.judge(image, prompt, outputs, type=stage[1:-1].lower())
+                best_index, judge_output_text, single_pass_latency = self.judge(image, prompt, outputs, type=stage[1:-1].lower())
+
+                text_output[stage]["judge_output_text"] = judge_output_text
+
                 judge_latencies.append(single_pass_latency)
                 total_kv_cache_size += single_pass_latency["kv_cache_size"]
 
@@ -457,6 +484,8 @@ class llama_vision_cot(BaseModel):
         # Save to JSON
         with open("latency_results.json", "w") as f:
             json.dump(latencies, f, indent=4)
+        with open("freeform_output.json", "a") as f:
+            json.dump(text_output, f, indent=4)
 
         print("Latencies saved to latency_results.json")
         final_output = self.processor.tokenizer.decode(input_ids[0][initial_length:], skip_special_tokens=True)
