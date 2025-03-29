@@ -359,9 +359,7 @@ class llama_vision_cot(BaseModel):
         else:
             return 1, judge_output_text, stats
     
-    def generate_inner_stage_beam(self, message, dataset=None):
-        prompt, image_path = self.message_to_promptimg(message, dataset=dataset)
-
+    def generate_inner_stage_beam(self, text_output_dict: dict):
         image = Image.open(image_path)
         messages = [
             {'role': 'user', 'content': [
@@ -381,7 +379,7 @@ class llama_vision_cot(BaseModel):
         end_markers = ['</SUMMARY>', '</CAPTION>', '</REASONING>', '</CONCLUSION>']
         latencies = {}
         text_output = {k: {"input": "", "judge_output_text": "", "output_candidates": []} for k in stages}
-        text_output["num_image_tokens"] = 0
+        text_output = {"image_path": image_path, "num_image_tokens": 0, **text_output}
 
         initial_length = len(inputs['input_ids'][0])
         input_ids = copy.deepcopy(inputs['input_ids'])
@@ -491,8 +489,8 @@ class llama_vision_cot(BaseModel):
         final_output = self.processor.tokenizer.decode(input_ids[0][initial_length:], skip_special_tokens=True)
         return final_output
     
-    def generate_inner(self, message, dataset=None):
-        return self.generate_inner_stage_beam(message, dataset)
+    def generate_inner(self, text_output_dict: dict):
+        return self.generate_inner_stage_beam(text_output_dict)
 
 def profile(func, *args, **kwargs):
     start_event = torch.cuda.Event(enable_timing=True)

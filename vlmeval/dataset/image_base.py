@@ -51,7 +51,7 @@ class ImageBaseDataset:
         max_idx = data['question_len'].idxmax()
         mean_len = data['question_len'].mean()
         avg_idx = (data['question_len'] - mean_len).abs().idxmin()
-        data = data.loc[[min_idx, avg_idx, max_idx]]
+        data = data.loc[[min_idx]]
 
         self.skip_noimg = skip_noimg
         if skip_noimg and 'image' in data:

@@ -97,7 +97,7 @@ class BaseModel:
         else:
             return None
 
-    def generate(self, message, dataset=None):
+    def generate(self, text_output_dict: dict):
         """Generate the output message.
 
         Args:
@@ -107,12 +107,7 @@ class BaseModel:
         Returns:
             str: The generated message.
         """
-        assert self.check_content(message) in ['str', 'dict', 'liststr', 'listdict'], f'Invalid input type: {message}'
-        message = self.preproc_content(message)
-        assert message is not None and self.check_content(message) == 'listdict'
-        for item in message:
-            assert item['type'] in self.allowed_types, f'Invalid input type: {item["type"]}'
-        return self.generate_inner(message, dataset)
+        return self.generate_inner(text_output_dict)
 
     def chat(self, messages, dataset=None):
         """The main function for multi-turn chatting. Will call `chat_inner` with the preprocessed input messages."""
