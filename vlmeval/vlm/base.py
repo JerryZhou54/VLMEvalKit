@@ -43,7 +43,7 @@ class BaseModel:
         return self.dump_image_func(line)
 
     @abstractmethod
-    def generate_inner(self, message, dataset=None):
+    def generate_inner(self, text_output_dict, start_stage):
         raise NotImplementedError
 
     def check_content(self, msgs):
@@ -97,7 +97,7 @@ class BaseModel:
         else:
             return None
 
-    def generate(self, text_output_dict: dict):
+    def generate(self, text_output_dict: dict, start_stage: str):
         """Generate the output message.
 
         Args:
@@ -107,7 +107,7 @@ class BaseModel:
         Returns:
             str: The generated message.
         """
-        return self.generate_inner(text_output_dict)
+        return self.generate_inner(text_output_dict, start_stage)
 
     def chat(self, messages, dataset=None):
         """The main function for multi-turn chatting. Will call `chat_inner` with the preprocessed input messages."""

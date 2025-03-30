@@ -17,13 +17,13 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-def infer_data(model, model_name, work_dir, json_dir, verbose=False, api_nproc=4):
+def infer_data(model, model_name, work_dir, json_dir, start_stage, verbose=False, api_nproc=4):
     with open(json_dir, 'r') as f:
         text_output_dict = json.load(f)
     new_output_dict = {}
     model = supported_VLM[model_name]() if isinstance(model, str) else model
     for k, v_dict in tqdm(text_output_dict.items()):
-        response_dict = model.generate(text_output_dict=v_dict)
+        response_dict = model.generate(text_output_dict=v_dict, start_stage=start_stage)
         torch.cuda.empty_cache()
 
         if verbose:
@@ -42,11 +42,11 @@ def infer_data(model, model_name, work_dir, json_dir, verbose=False, api_nproc=4
 
 
 # A wrapper for infer_data, do the pre & post processing
-def infer_data_job(model, work_dir, model_name, json_dir, verbose=False, api_nproc=4, ignore_failed=False):
+def infer_data_job(model, work_dir, model_name, json_dir, start_stage, verbose=False, api_nproc=4, ignore_failed=False):
     rank, world_size = get_rank_and_world_size()
 
     model = infer_data(
-        model=model, work_dir=work_dir, model_name=model_name, json_dir=json_dir,
+        model=model, work_dir=work_dir, model_name=model_name, json_dir=json_dir, start_stage=start_stage,
         verbose=verbose, api_nproc=api_nproc)
     if world_size > 1:
         dist.barrier()

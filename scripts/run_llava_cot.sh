@@ -1,3 +1,3 @@
 HOME="/home/ubuntu/Wei"
-python run.py --data MathVista_MINI --model LLaVA-CoT --mode infer
+python run_json.py --json_dir /home/ubuntu/Wei/VLMEvalKit/freeform_output.json --model LLaVA-CoT --start_stage "<REASONING>"
 rm -rf outputs/

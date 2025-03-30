@@ -359,35 +359,54 @@ class llama_vision_cot(BaseModel):
         else:
             return 1, judge_output_text, stats
     
-    def generate_inner_stage_beam(self, text_output_dict: dict):
+    def generate_inner_stage_beam(self, text_output_dict: dict, start_stage: str):
+        torch.manual_seed(42)
+        
+        image_path = text_output_dict["image_path"]
         image = Image.open(image_path)
-        messages = [
+        stages = ['<SUMMARY>', '<CAPTION>', '<REASONING>', '<CONCLUSION>']
+        end_markers = ['</SUMMARY>', '</CAPTION>', '</REASONING>', '</CONCLUSION>']
+        assert start_stage in stages
+        print(f"Running search starting at Stage {start_stage}")
+        start_idx = stages.index(start_stage)
+        stages = stages[start_idx:]
+        end_markers = end_markers[start_idx:]
+
+        # messages = [
+        #     {'role': 'user', 'content': [
+        #         {'type': 'image'},
+        #         {'type': 'text', 'text': text_output_dict[start_stage]["input"].removesuffix("assistant\n\n").removeprefix("user\n\n")}
+        #     ]}
+        # ]
+        # stage_input_text = self.processor.apply_chat_template(messages, add_generation_prompt=False)
+
+        prompt = text_output_dict["<SUMMARY>"]["input"].removesuffix("assistant\n\n").removeprefix("user\n\n")
+        orig_messages = [
             {'role': 'user', 'content': [
                 {'type': 'image'},
                 {'type': 'text', 'text': prompt}
             ]}
         ]
-        input_text = self.processor.apply_chat_template(messages, add_generation_prompt=True)
-        inputs = self.processor(image, input_text, return_tensors='pt').to(self.device)
-        if not self.use_custom_prompt(dataset):
-            if DATASET_TYPE(dataset) == 'MCQ' or DATASET_TYPE(dataset) == 'Y/N':
-                self.kwargs['max_new_tokens'] = 2048
-            else:
-                self.kwargs['max_new_tokens'] = 2048
+        orig_input_text = self.processor.apply_chat_template(orig_messages, add_generation_prompt=True)
+        stage_input_text = orig_input_text
+        if start_stage != "<SUMMARY>":
+            start_idx = text_output_dict[start_stage]["input"].index("<SUMMARY>")
+            stage_input_text += text_output_dict[start_stage]["input"][start_idx:]
+        # assert orig_input_text in stage_input_text, print(f"{orig_input_text}\n-----------------\n{stage_input_text}")
+        orig_inputs = self.processor(image, orig_input_text, return_tensors='pt')
+        initial_length = len(orig_inputs['input_ids'][0])
         
-        stages = ['<SUMMARY>', '<CAPTION>', '<REASONING>', '<CONCLUSION>']
-        end_markers = ['</SUMMARY>', '</CAPTION>', '</REASONING>', '</CONCLUSION>']
+        inputs = self.processor(image, stage_input_text, return_tensors='pt').to(self.device)
+        self.kwargs['max_new_tokens'] = 2048
+        
         latencies = {}
-        text_output = {k: {"input": "", "judge_output_text": "", "output_candidates": []} for k in stages}
-        text_output = {"image_path": image_path, "num_image_tokens": 0, **text_output}
+        text_output = copy.deepcopy(text_output_dict)
 
-        initial_length = len(inputs['input_ids'][0])
         input_ids = copy.deepcopy(inputs['input_ids'])
-        input_txt = self.processor.tokenizer.decode(input_ids[0], skip_special_tokens=True)
-        initial_txt_length = len(input_txt)
-        del input_txt
 
         for stage, end_marker in zip(stages, end_markers):
+            text_output[stage]["output_candidates"] = []
+
             total_kv_cache_size = 0
             torch.cuda.empty_cache()
             torch.cuda.reset_max_memory_allocated()
@@ -402,6 +421,7 @@ class llama_vision_cot(BaseModel):
 
             gen_latencies = []
             input_txt = self.processor.tokenizer.decode(input_ids[0], skip_special_tokens=True)
+            # assert input_txt == text_output_dict[stage]['input'], print(f"{input_txt}\n-------------\n{text_output_dict[stage]['input']}")
             text_output[stage]['input'] = input_txt
             # print("Input: \n", input_txt)
             for it in range(2):  
@@ -430,7 +450,7 @@ class llama_vision_cot(BaseModel):
                 new_generated_ids = output[0]
                 
                 generated_text = self.processor.tokenizer.decode(new_generated_ids[initial_length:], skip_special_tokens=True)
-                start_idx = len(input_txt) - initial_txt_length
+                start_idx = generated_text.index(stage)
                 text_output[stage]['output_candidates'].append(generated_text[start_idx:])
                 # print(generated_text + "\n")
                 
@@ -482,15 +502,15 @@ class llama_vision_cot(BaseModel):
         # Save to JSON
         with open("latency_results.json", "w") as f:
             json.dump(latencies, f, indent=4)
-        with open("freeform_output.json", "a") as f:
-            json.dump(text_output, f, indent=4)
+        # with open("freeform_output.json", "a") as f:
+        #     json.dump(text_output, f, indent=4)
 
         print("Latencies saved to latency_results.json")
-        final_output = self.processor.tokenizer.decode(input_ids[0][initial_length:], skip_special_tokens=True)
-        return final_output
+        # final_output = self.processor.tokenizer.decode(input_ids[0][initial_length:], skip_special_tokens=True)
+        return text_output
     
-    def generate_inner(self, text_output_dict: dict):
-        return self.generate_inner_stage_beam(text_output_dict)
+    def generate_inner(self, text_output_dict: dict, start_stage: str):
+        return self.generate_inner_stage_beam(text_output_dict, start_stage)
 
 def profile(func, *args, **kwargs):
     start_event = torch.cuda.Event(enable_timing=True)

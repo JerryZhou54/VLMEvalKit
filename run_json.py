@@ -31,6 +31,7 @@ def parse_args():
     # Essential Args, Setting the Names of Datasets and Models
     parser.add_argument('--json_dir', type=str, help='Dir of output json file')
     parser.add_argument('--model', type=str, nargs='+', help='Names of Models')
+    parser.add_argument('--start_stage', type=str, choices=['<SUMMARY>', '<CAPTION>', '<REASONING>', '<CONCLUSION>'])
     # Work Dir
     parser.add_argument('--work-dir', type=str, default='./outputs', help='select the output directory')
     # Logging Utils
@@ -110,8 +111,8 @@ def main():
             work_dir=pred_root,
             model_name=model_name,
             json_dir=args.json_dir,
+            start_stage=args.start_stage,
             verbose=args.verbose,
-            api_nproc=args.api_nproc,
             ignore_failed=args.ignore)
 
         if world_size > 1:
