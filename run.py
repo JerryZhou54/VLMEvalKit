@@ -13,7 +13,6 @@ from vlmeval.smp import *
 from vlmeval.utils.result_transfer import MMMU_result_transfer, MMTBench_result_transfer
 
 def build_model_from_config(cfg, model_name):
-    import vlmeval.api
     import vlmeval.vlm
     config = cp.deepcopy(cfg[model_name])
     if config == {}:
@@ -154,6 +153,7 @@ You can launch the evaluation by setting either --data and --model or --config.
 
 
 def main():
+    torch.manual_seed(42)
     logger = get_logger('RUN')
     rank, world_size = get_rank_and_world_size()
     args = parse_args()

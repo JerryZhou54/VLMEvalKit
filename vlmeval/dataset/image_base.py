@@ -43,7 +43,7 @@ class ImageBaseDataset:
         self.img_root = osp.join(ROOT, 'images', img_root_map(dataset))
 
         data = self.load_data(dataset)
-        data = data[data['question_type'] == 'free_form']
+        data = data[data['question_type'] == 'multi_choice']
         data['question_len'] = data['question'].str.len()
 
         # Find the indices for min, max, and closest to mean

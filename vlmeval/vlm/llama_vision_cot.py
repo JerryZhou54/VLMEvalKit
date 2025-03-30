@@ -484,7 +484,7 @@ class llama_vision_cot(BaseModel):
         # Save to JSON
         with open("latency_results.json", "w") as f:
             json.dump(latencies, f, indent=4)
-        with open("freeform_output.json", "a") as f:
+        with open("multichoice_output.json", "a") as f:
             json.dump(text_output, f, indent=4)
 
         print("Latencies saved to latency_results.json")
