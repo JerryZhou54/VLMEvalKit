@@ -443,7 +443,7 @@ moondream_series={
 
 llama_series={
     'Llama-3.2-11B-Vision-Instruct': partial(llama_vision, model_path='meta-llama/Llama-3.2-11B-Vision-Instruct'),
-    'LLaVA-CoT': partial(llama_vision, model_path='Xkev/Llama-3.2V-11B-cot'),
+    'LLaVA-CoT': partial(llama_vision_cot, model_path='Xkev/Llama-3.2V-11B-cot'),
     'Llama-3.2-90B-Vision-Instruct': partial(llama_vision, model_path='meta-llama/Llama-3.2-90B-Vision-Instruct'),
 }
 

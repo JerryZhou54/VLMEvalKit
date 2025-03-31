@@ -43,6 +43,16 @@ class ImageBaseDataset:
         self.img_root = osp.join(ROOT, 'images', img_root_map(dataset))
 
         data = self.load_data(dataset)
+        data = data[data['question_type'] == 'multi_choice']
+        data['question_len'] = data['question'].str.len()
+
+        # Find the indices for min, max, and closest to mean
+        min_idx = data['question_len'].idxmin()
+        max_idx = data['question_len'].idxmax()
+        mean_len = data['question_len'].mean()
+        avg_idx = (data['question_len'] - mean_len).abs().idxmin()
+        data = data.loc[[min_idx, avg_idx, max_idx]]
+
         self.skip_noimg = skip_noimg
         if skip_noimg and 'image' in data:
             data = data[~pd.isna(data['image'])]
